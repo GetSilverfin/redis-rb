@@ -20,7 +20,8 @@ class Redis
       :reconnect_attempts => 1,
       :reconnect_delay => 0,
       :reconnect_delay_max => 0.5,
-      :inherit_socket => false
+      :inherit_socket => false,
+      :command_error_handler => nil
     }
 
     attr_reader :options
@@ -121,7 +122,13 @@ class Redis
 
     def call(command)
       reply = process([command]) { read }
-      raise reply if reply.is_a?(CommandError)
+      if reply.is_a?(CommandError)
+        if @options[:command_error_handler].respond_to?(:call)
+          @options[:command_error_handler].call(reply, command)
+        else
+          raise reply
+        end
+      end
 
       if block_given?
         yield reply
@@ -400,7 +407,7 @@ class Redis
 
       defaults.keys.each do |key|
         # Fill in defaults if needed
-        if defaults[key].respond_to?(:call)
+        if defaults[key].respond_to?(:call) && key != :command_error_handler
           defaults[key] = defaults[key].call
         end
 
